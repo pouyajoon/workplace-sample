@@ -8,7 +8,7 @@ const room = {
     "points": "[{\"x\":2385.840576171875,\"y\":2221.446533203125},{\"x\":2604.172607421875,\"y\":2221.446533203125},{\"x\":2604.172607421875,\"y\":2211.672607421875},{\"x\":2623.855224609375,\"y\":2211.672607421875},{\"x\":2623.855224609375,\"y\":2225.450439453125},{\"x\":2689.299072265625,\"y\":2225.450439453125},{\"x\":2689.897705078125,\"y\":1774.2655029296875},{\"x\":2555.417724609375,\"y\":1774.2655029296875},{\"x\":2555.417724609375,\"y\":1667.7734375},{\"x\":2507.8125,\"y\":1623.0799560546875},{\"x\":2385.997314453125,\"y\":1623.0799560546875}]",
 };
 
-const item = {
+const item1 = {
     "id": 71795,
     "x": 2423.0,
     "y": 1761.0,
@@ -57,6 +57,70 @@ const item = {
     }
 }
 
+const item2 = {
+    "id": 71787,
+    "x": 2423.0,
+    "y": 1708.0,
+    "room_id": 10548,
+    "item_quality_id": null,
+    "purchase_date": null,
+    "immo_code": "A/D",
+    "item_type_id": 180,
+    "rotation": 180.4572595741628,
+    "external_id": null,
+    "display_name": "I",
+    "physical_id": "P388",
+    "is_flex": false,
+    "color": "#ff8040",
+    "item_type": {
+        "id": 180,
+        "name": "Pdt 160x80 A/D",
+        "code": "AA",
+        "price": null,
+        "color": "#ff8040",
+        "shape": [{
+            "x": 0,
+            "y": 0.3195514678955078
+        }, {
+            "x": 63.84716796875,
+            "y": 0
+        }, {
+            "x": 64.1332778930664,
+            "y": 32.17681121826172
+        }, {
+            "x": 32.31993103027344,
+            "y": 32.167877197265625
+        }, {
+            "x": 44.17586135864258,
+            "y": 34.3560676574707
+        }, {
+            "x": 44.4832763671875,
+            "y": 58.39840316772461
+        }, {
+            "x": 20.534412384033203,
+            "y": 58.336090087890625
+        }, {
+            "x": 20.381698608398438,
+            "y": 34.239253997802734
+        }, {
+            "x": 32.301658630371094,
+            "y": 32.161590576171875
+        }, {
+            "x": 0.2004718780517578,
+            "y": 32.377288818359375
+        }],
+        "area": 1.66,
+        "perimeter": 7.2,
+        "icon": "",
+        "display_information_on_map": true,
+        "item_type_workspace": true,
+        "height": 1.0,
+        "external_id": "",
+        "display_items_on_map": true,
+        "zindex": 1,
+        "item_type_family_id": null
+    }
+}
 const floor = {
     "id": 114,
     "name": "R+2",
@@ -83,19 +147,27 @@ function addPolygon(points) {
 }
 
 
-function init() {
-    const { item_type, x, y, rotation } = item;
+function displayItem(item, mapRatio) {
+    const { item_type, x, y } = item;
     const points = item_type.shape;
+
+    const rotation = importRound(item.rotation < 0 ? item.rotation + 360 : item.rotation);
+    const position = getNewItemCenterFromLegacy(mapRatio, { x, y }, rotation, points);
+
+    const itemPoints = translatedAndRotatedPoints(points, mapRatio, position, rotation, getMiddleFromPoints);
+    const itemPolygon = addPolygon(itemPoints);
+    itemPolygon.setAttribute('fill', 'red');
+
+}
+
+function init() {
 
     // calculer le map ratio
     const { map_scale_x1, map_scale_x2, map_scale_y1, map_scale_y2, map_scale_length } = floor;
     const mapRatio = map_scale_length / lineDistance({ x: map_scale_x1, y: map_scale_y1 }, { x: map_scale_x2, y: map_scale_y2 });
 
-
-    const itemPoints = translatedAndRotatedPoints(points, mapRatio, { x, y }, rotation);
-    const itemPolygon = addPolygon(itemPoints);
-    itemPolygon.setAttribute('fill', 'red');
-
+    displayItem(item1, mapRatio);
+    displayItem(item2, mapRatio);
 
     const roomPoints = JSON.parse(room.points);
     const roomPolygon = addPolygon(roomPoints);
@@ -161,9 +233,9 @@ function getItemMapRatio(mapRatio) {
     return (1 / mapRatio) / defaultItemTypeRatio;
 }
 
-function translatedAndRotatedPoints(points, mapRatio, position, rotation) {
+function translatedAndRotatedPoints(points, mapRatio, position, rotation, getCenter) {
     const ratio = getItemMapRatio(mapRatio);
-    const middle = getMiddleFromPoints(points);
+    const middle = getCenter(points);
     if (rotation !== 0) {
         points = rotateItemsPoints(middle, points, rotation);
     }
@@ -209,4 +281,69 @@ function getBoundaryBoxFromBounds(b) {
             y: b.top + size.height / 2
         }
     };
+}
+
+function getOldCenterForPoints(points) {
+    const nPts = points.length;
+    let x = 0;
+    let y = 0;
+    let f;
+    let j = nPts - 1;
+    let p1;
+    let p2;
+
+    for (let i = 0; i < nPts; j = i++) {
+        p1 = points[i];
+        p2 = points[j];
+        f = p1.x * p2.y - p2.x * p1.y;
+        x += (p1.x + p2.x) * f;
+        y += (p1.y + p2.y) * f;
+    }
+
+    f = oldArea(points) * 6;
+    return {
+        x: x / f,
+        y: y / f
+    };
+}
+function getNewItemCenterFromLegacy(mapRatio, position, rotation, itemTypePoints) {
+    let { x, y } = position;
+    const oldPoints = translatedAndRotatedPoints(itemTypePoints, mapRatio, position, rotation, getOldCenterForPoints);
+    const nPoints = translatedAndRotatedPoints(itemTypePoints, mapRatio, position, rotation, getMiddleFromPoints);
+    const oldCenter = getOldCenterForPoints(oldPoints);
+    const oldFashionCenterFromNewPoints = getOldCenterForPoints(nPoints);
+    const diff = {
+        x: (oldCenter.x - oldFashionCenterFromNewPoints.x),
+        y: (oldCenter.y - oldFashionCenterFromNewPoints.y)
+    };
+    x = importRound(x + diff.x);
+    y = importRound(y + diff.y);
+
+    return { x, y };
+}
+
+function oldArea(pts) {
+    let area = 0;
+    const nPts = pts.length;
+    let j = nPts - 1;
+    let p1;
+    let p2;
+
+    for (let i = 0; i < nPts; j = i++) {
+        p1 = pts[i];
+        p2 = pts[j];
+        area += p1.x * p2.y;
+        area -= p1.y * p2.x;
+    }
+    area /= 2;
+    return area;
+}
+
+function round(v, decimal) {
+    const d = Math.pow(10, decimal);
+    return Math.round(v * d) / d;
+}
+
+function importRound(v) {
+    return round(v, 10);
 }
